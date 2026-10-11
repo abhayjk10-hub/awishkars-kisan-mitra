@@ -1,4 +1,5 @@
 import { createClient } from './supabase/client';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { Mandi, SlotBooking, FarmerDelay, SlotStatus, MandiRegistrationInput, MandiSession } from '@/types';
 export type { Mandi };
 
@@ -181,7 +182,7 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
   }
 }
 
-function notifyBroadcast(type: string, payload: any) {
+function notifyBroadcast(type: string, payload: unknown) {
   if (broadcastChannel) {
     try {
       broadcastChannel.postMessage({ type, payload, timestamp: Date.now() });
@@ -995,9 +996,20 @@ export async function getAllFarmerDelays(): Promise<FarmerDelay[]> {
 /* ─────────────────────────────────────────────────────────────────────────
  * REAL-TIME SUBSCRIPTIONS
  * ───────────────────────────────────────────────────────────────────────── */
-export function subscribeToMandiQueue(mandiId: string, onUpdate: (event: any) => void): () => void {
+type MandiQueueEvent = {
+  type?: string;
+  payload?: {
+    mandi_id?: string;
+    token_number?: SlotBooking['token_number'];
+    farmer_name?: string;
+    booking?: Partial<SlotBooking>;
+    bookingId?: string;
+  };
+};
+
+export function subscribeToMandiQueue(mandiId: string, onUpdate: (event: MandiQueueEvent) => void): () => void {
   const supabase = createClient();
-  let supabaseSub: any = null;
+  let supabaseSub: ReturnType<typeof supabase.channel> | null = null;
 
   try {
     supabaseSub = supabase
@@ -1010,8 +1022,8 @@ export function subscribeToMandiQueue(mandiId: string, onUpdate: (event: any) =>
           table: 'slot_bookings',
           filter: `mandi_id=eq.${mandiId}`,
         },
-        (payload: any) => {
-          onUpdate(payload);
+        () => {
+          onUpdate({});
         }
       )
       .subscribe();
@@ -1020,14 +1032,14 @@ export function subscribeToMandiQueue(mandiId: string, onUpdate: (event: any) =>
   }
 
   // Cross-tab broadcast listener
-  const handleBroadcast = (e: MessageEvent) => {
+  const handleBroadcast = (e: MessageEvent<MandiQueueEvent>) => {
     if (e.data?.payload?.mandi_id === mandiId || e.data?.type === 'TOKEN_STATUS_UPDATED') {
       onUpdate(e.data);
     }
   };
 
   const handleCustomEvent = (e: Event) => {
-    const detail = (e as CustomEvent).detail;
+    const detail = (e as CustomEvent<MandiQueueEvent>).detail;
     if (detail?.payload?.mandi_id === mandiId || detail?.type === 'TOKEN_STATUS_UPDATED') {
       onUpdate(detail);
     }
@@ -1059,7 +1071,7 @@ export function subscribeToMandiQueue(mandiId: string, onUpdate: (event: any) =>
 
 export function subscribeToFarmerBooking(bookingId: string, onUpdate: (booking: SlotBooking) => void): () => void {
   const supabase = createClient();
-  let supabaseSub: any = null;
+  let supabaseSub: ReturnType<typeof supabase.channel> | null = null;
 
   try {
     supabaseSub = supabase
@@ -1072,7 +1084,7 @@ export function subscribeToFarmerBooking(bookingId: string, onUpdate: (booking: 
           table: 'slot_bookings',
           filter: `id=eq.${bookingId}`,
         },
-        (payload: any) => {
+        (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
           if (payload.new) {
             onUpdate(payload.new as SlotBooking);
           }

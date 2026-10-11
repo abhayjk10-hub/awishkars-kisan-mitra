@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -125,6 +125,8 @@ export default function SlotBookingPage() {
   useEffect(() => {
     if (user) {
       const metaName = user.user_metadata?.full_name || user.user_metadata?.name;
+      // User profile fields are synchronized into the editable booking form.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (metaName && !farmerName) setFarmerName(metaName);
       if (user.phone && !farmerPhone) setFarmerPhone(user.phone.replace(/\D/g, '').slice(-10));
     }
@@ -150,6 +152,8 @@ export default function SlotBookingPage() {
   useEffect(() => {
     const cleanPhone = farmerPhone.replace(/\D/g, '').slice(-10);
     if (cleanPhone.length === 10 || user?.id) {
+      // Fetching the current user's bookings is an effect-triggered external request.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadFarmerBookings();
     }
   }, [farmerPhone, user?.id]);
@@ -198,12 +202,27 @@ export default function SlotBookingPage() {
       if (confirmedBooking?.id === cancelModalBooking.id) {
         setConfirmedBooking(null);
       }
-    } catch (err: any) {
-      setCancelError(err.message || t('error.generic', language));
+    } catch (err: unknown) {
+      setCancelError(err instanceof Error ? err.message : t('error.generic', language));
     } finally {
       setIsCancelling(false);
     }
   };
+
+  const loadMandisList = useCallback(async (lat?: number, lng?: number) => {
+    setLoadingMandis(true);
+    try {
+      const list = await getMandis(lat, lng);
+      setMandis(list);
+      if (list.length > 0 && !selectedMandiId) {
+        setSelectedMandiId(list[0].id);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingMandis(false);
+    }
+  }, [selectedMandiId]);
 
   // Request browser location on mount
   const requestLocation = () => {
@@ -234,28 +253,17 @@ export default function SlotBookingPage() {
   };
 
   useEffect(() => {
+    // Geolocation is a browser API; its result initializes the page after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     requestLocation();
   }, []);
-
-  const loadMandisList = async (lat?: number, lng?: number) => {
-    setLoadingMandis(true);
-    try {
-      const list = await getMandis(lat, lng);
-      setMandis(list);
-      if (list.length > 0 && !selectedMandiId) {
-        setSelectedMandiId(list[0].id);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoadingMandis(false);
-    }
-  };
 
   // Check farmer delay history whenever phone changes
   useEffect(() => {
     const cleanPhone = farmerPhone.replace(/\D/g, '');
     if (cleanPhone.length === 10) {
+      // Loading state tracks this phone-specific external lookup.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCheckingDelays(true);
       getFarmerDelays(cleanPhone)
         .then((delays) => {
@@ -264,6 +272,8 @@ export default function SlotBookingPage() {
         .catch(() => setFarmerDelays([]))
         .finally(() => setCheckingDelays(false));
     } else {
+      // Clear lookup results when the identifier is no longer valid.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFarmerDelays([]);
     }
   }, [farmerPhone]);
@@ -340,7 +350,7 @@ export default function SlotBookingPage() {
         mandiName: selectedMandi.name,
         currentToken: 1,
         totalAhead: 2,
-        status: (result.booking.status as any) || 'waiting',
+        status: result.booking.status === 'active' ? 'now' : result.booking.status,
         estimatedWaitMinutes: 15,
         slotTime: `${slot.start} – ${slot.end}`,
         bookingDate: result.booking.booking_date,
@@ -350,8 +360,8 @@ export default function SlotBookingPage() {
         bookingId: result.booking.id,
         farmerPhone: result.booking.farmer_phone,
       });
-    } catch (err: any) {
-      setSubmitError(err.message || t('error.generic', language));
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : t('error.generic', language));
     } finally {
       setIsSubmitting(false);
     }

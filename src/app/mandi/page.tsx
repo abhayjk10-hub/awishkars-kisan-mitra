@@ -26,6 +26,8 @@ export default function MandiGatewayPage() {
     if (session) {
       router.push('/mandi/dashboard');
     } else {
+      // Session state is read from browser storage after hydration.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setChecking(false);
     }
   }, [router]);

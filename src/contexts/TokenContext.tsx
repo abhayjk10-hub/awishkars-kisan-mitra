@@ -43,6 +43,8 @@ export function TokenProvider({ children }: { children: ReactNode }) {
       const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as TokenData;
+        // Restore browser-only token state after hydration.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setTokenState(parsed);
       }
     } catch {
@@ -55,30 +57,30 @@ export function TokenProvider({ children }: { children: ReactNode }) {
     if (!token?.bookingId) return;
     
     // Import dynamically or use event listener
-    const handleUpdate = (e: any) => {
-      const payload = e.detail?.payload || e.data?.payload;
-      if (payload?.bookingId === token.bookingId || payload?.id === token.bookingId) {
-        const newStatus = payload.status;
-        let mappedStatus: TokenStatus = token.status;
-        if (newStatus === 'active') mappedStatus = 'now';
-        else if (newStatus === 'completed') mappedStatus = 'completed';
-        else if (newStatus === 'no-show') mappedStatus = 'no-show';
-        else if (newStatus === 'waiting') mappedStatus = 'waiting';
-        else if (newStatus === 'waitlisted') mappedStatus = 'waitlisted';
-        else if (newStatus === 'cancelled') mappedStatus = 'cancelled';
+    const handleUpdate = (e: Event) => {
+      const payload = (e as CustomEvent<{ payload?: { bookingId?: string; id?: string; status?: string } }>).detail?.payload;
+      if (!payload || (payload.bookingId !== token.bookingId && payload.id !== token.bookingId)) return;
 
-        setTokenState((prev) => {
-          if (!prev) return null;
-          const updated: TokenData = {
-            ...prev,
-            status: mappedStatus,
-            totalAhead: mappedStatus === 'now' ? 0 : prev.totalAhead,
-            estimatedWaitMinutes: mappedStatus === 'now' ? 0 : prev.estimatedWaitMinutes,
-          };
-          try { localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(updated)); } catch {}
-          return updated;
-        });
-      }
+      const newStatus = payload.status;
+      let mappedStatus: TokenStatus = token.status;
+      if (newStatus === 'active') mappedStatus = 'now';
+      else if (newStatus === 'completed') mappedStatus = 'completed';
+      else if (newStatus === 'no-show') mappedStatus = 'no-show';
+      else if (newStatus === 'waiting') mappedStatus = 'waiting';
+      else if (newStatus === 'waitlisted') mappedStatus = 'waitlisted';
+      else if (newStatus === 'cancelled') mappedStatus = 'cancelled';
+
+      setTokenState((prev) => {
+        if (!prev) return null;
+        const updated: TokenData = {
+          ...prev,
+          status: mappedStatus,
+          totalAhead: mappedStatus === 'now' ? 0 : prev.totalAhead,
+          estimatedWaitMinutes: mappedStatus === 'now' ? 0 : prev.estimatedWaitMinutes,
+        };
+        try { localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+        return updated;
+      });
     };
 
     window.addEventListener('km_sync_event', handleUpdate);

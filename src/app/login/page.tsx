@@ -49,10 +49,10 @@ function LoginContent() {
   // Sync role from query parameters if URL changes
   useEffect(() => {
     const r = searchParams.get('role');
-    if (r === 'mandi') {
-      setRole('mandi');
-    } else if (r === 'farmer') {
-      setRole('farmer');
+    if (r === 'mandi' || r === 'farmer') {
+      // The selected login flow mirrors a changing URL query parameter.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRole(r);
     }
   }, [searchParams]);
 
@@ -92,8 +92,8 @@ function LoginContent() {
         window.dispatchEvent(new Event('km_mandi_sync'));
       }
       router.push('/mandi/dashboard');
-    } catch (err: any) {
-      setMandiError(err.message || 'An error occurred during Mandi operator login.');
+    } catch (err: unknown) {
+      setMandiError(err instanceof Error ? err.message : 'An error occurred during Mandi operator login.');
       setMandiLoading(false);
     }
   };

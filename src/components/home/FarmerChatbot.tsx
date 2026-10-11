@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, ChevronDown, Mic, MicOff, Send, Volume2, VolumeX, X } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { t } from '@/lib/translations';
+import type { Language } from '@/lib/translations';
 
 // Web Speech API types (not universally in lib.dom.d.ts)
 declare global {
@@ -34,12 +35,12 @@ type Message = {
   mode?: 'voice' | 'text';
 };
 
-function getQuickReplies(lang: string) {
+function getQuickReplies(lang: Language) {
   return [
-    t('chat.suggestedWheat', lang as any),
-    t('chat.suggestedTomato', lang as any),
-    t('chat.suggestedWeather', lang as any),
-    t('chat.suggestedTurDal', lang as any),
+    t('chat.suggestedWheat', lang),
+    t('chat.suggestedTomato', lang),
+    t('chat.suggestedWeather', lang),
+    t('chat.suggestedTurDal', lang),
   ];
 }
 
@@ -84,6 +85,8 @@ export default function FarmerChatbot() {
 
   // Update greeting when language changes
   useEffect(() => {
+    // Reset the conversation greeting when the user's selected language changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages([{ role: 'assistant', content: getGreeting(language) }]);
   }, [language]);
 

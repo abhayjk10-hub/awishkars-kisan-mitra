@@ -5,8 +5,9 @@ import { Clock, MapPin, X } from 'lucide-react';
 import { useToken, type TokenStatus } from '@/contexts/TokenContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { t } from '@/lib/translations';
+import type { Language } from '@/lib/translations';
 
-function getStatusLabel(status: TokenStatus, ahead: number, lang: any): string {
+function getStatusLabel(status: TokenStatus, ahead: number, lang: Language): string {
   if (status === 'completed') return `✅ ${t('token.statusCompleted', lang)}`;
   if (status === 'no-show') return `⚠️ ${t('slot.delayWarning', lang)}`;
   if (status === 'cancelled') return `❌ ${t('slot.statusCancelled', lang)}`;

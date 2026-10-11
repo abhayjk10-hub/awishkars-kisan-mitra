@@ -99,8 +99,8 @@ export default function MandiRegisterPage() {
       }
 
       router.push('/mandi/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Failed to register mandi.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to register mandi.');
       setSubmitting(false);
     }
   };

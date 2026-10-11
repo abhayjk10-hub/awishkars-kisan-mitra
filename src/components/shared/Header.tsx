@@ -81,6 +81,8 @@ export default function Header() {
 
   // Close dropdown on navigation
   useEffect(() => {
+    // Close transient menus when the route changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setProfileDropdownOpen(false);
     setMenuOpen(false);
   }, [pathname]);

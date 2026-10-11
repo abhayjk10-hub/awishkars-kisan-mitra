@@ -119,6 +119,8 @@ export default function MandiDashboardPage() {
       router.push('/login?role=mandi&unauthorized=farmer');
       return;
     }
+    // The operator session is stored in the browser and must be read after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSession(s);
     getMandis().then(setAllMandis);
     setLoading(false);
@@ -147,13 +149,15 @@ export default function MandiDashboardPage() {
     } finally {
       setRefreshing(false);
     }
-  }, [session?.mandi?.id, selectedDate]);
+  }, [session, selectedDate]);
 
   useEffect(() => {
     if (session?.mandi?.id) {
+      // This starts the queue refresh for the current operator and date.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       refreshQueue();
     }
-  }, [session?.mandi?.id, selectedDate, refreshQueue]);
+  }, [refreshQueue]);
 
   // Real-Time Queue Subscription
   useEffect(() => {
@@ -491,7 +495,7 @@ export default function MandiDashboardPage() {
                 {/* Status Filter */}
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  onChange={(e) => setStatusFilter(e.target.value as 'all' | SlotStatus)}
                   className="text-xs font-semibold px-3 py-2 rounded-xl border border-primary-200 text-primary-800 bg-white"
                 >
                   <option value="all">All Statuses ({metrics.total})</option>

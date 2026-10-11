@@ -27,13 +27,13 @@ const maskKey = (key?: string): string => {
 };
 
 const logger = {
-  info: (msg: string, meta?: Record<string, any>) => {
+  info: (msg: string, meta?: Record<string, unknown>) => {
     console.log(`[Chat API] [INFO] ${msg}`, meta ? JSON.stringify(meta) : '');
   },
-  warn: (msg: string, meta?: Record<string, any>) => {
+  warn: (msg: string, meta?: Record<string, unknown>) => {
     console.warn(`[Chat API] [WARN] ${msg}`, meta ? JSON.stringify(meta) : '');
   },
-  error: (msg: string, err?: any) => {
+  error: (msg: string, err?: unknown) => {
     console.error(`[Chat API] [ERROR] ${msg}`, err instanceof Error ? err.message : err);
   },
 };
@@ -1248,8 +1248,8 @@ const fetchLiveMandiRecordsWithRetry = async (): Promise<{
           source: 'data.gov.in (Live Government Agmarknet API)',
         };
       }
-    } catch (err: any) {
-      logger.warn(`Data.gov.in fetch attempt ${attempt} failed: ${err.message}`);
+    } catch (err: unknown) {
+      logger.warn(`Data.gov.in fetch attempt ${attempt} failed: ${err instanceof Error ? err.message : String(err)}`);
       if (attempt < maxAttempts) {
         await new Promise((res) => setTimeout(res, 800));
       }
@@ -1441,7 +1441,7 @@ export async function POST(request: Request) {
         commodityData: relevantRecords.slice(0, 4),
         responseTimeMs: Date.now() - startTime,
       });
-    } catch (llmErr: any) {
+    } catch (llmErr: unknown) {
       logger.error('OpenAI invocation failed, using built-in mini ChatGPT engine', llmErr);
       let directAnswer = '';
       if (userWantsWeather) directAnswer = generateWeatherResponse(latestMessage, userLanguage);
@@ -1461,7 +1461,7 @@ export async function POST(request: Request) {
         responseTimeMs: Date.now() - startTime,
       });
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error('Unhandled server exception in /api/chat', err);
     return NextResponse.json(
       {

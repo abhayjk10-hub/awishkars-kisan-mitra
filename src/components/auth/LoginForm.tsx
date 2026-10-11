@@ -9,6 +9,7 @@ import { t } from '@/lib/translations';
 import InputField from '@/components/shared/InputField';
 import PrimaryButton from '@/components/shared/PrimaryButton';
 import AlertMessage from '@/components/shared/AlertMessage';
+import { parseRegisteredFarmers, type RegisteredFarmerRecord } from '@/lib/registered-farmers';
 import ForgotPasswordFlow from '@/components/auth/ForgotPasswordFlow';
 
 type ActiveView = 'login' | 'forgot-password';
@@ -33,6 +34,8 @@ export default function LoginForm({ onSwitchToRegister }: { onSwitchToRegister: 
       if (typeof window !== 'undefined') {
         const last = localStorage.getItem('km_last_registered_identifier');
         if (last && !identifier) {
+          // The saved identifier is browser-only state and must be read after hydration.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setIdentifier(last);
         }
       }
@@ -82,7 +85,7 @@ export default function LoginForm({ onSwitchToRegister }: { onSwitchToRegister: 
       const tenDigits = digits.slice(-10);
       const formattedPhone = '+91' + tenDigits;
 
-      let authResponse: any = null;
+      let authResponse: Awaited<ReturnType<typeof supabase.auth.signInWithPassword>> | null = null;
 
       if (isEmail) {
         authResponse = await supabase.auth.signInWithPassword({
@@ -149,7 +152,7 @@ export default function LoginForm({ onSwitchToRegister }: { onSwitchToRegister: 
       }
 
       // If Supabase returned error or phone format mismatch, check local registration and password store
-      let matchedRecord: any = null;
+      let matchedRecord: RegisteredFarmerRecord | null = null;
       let matchedStoredPassword: string | null = null;
 
       if (typeof window !== 'undefined') {
@@ -185,23 +188,22 @@ export default function LoginForm({ onSwitchToRegister }: { onSwitchToRegister: 
         }
 
         if (!matchedStoredPassword) {
-          const listRaw = localStorage.getItem('km_registered_farmers');
-          if (listRaw) {
-            try {
-              const list = JSON.parse(listRaw);
-              if (Array.isArray(list)) {
-                const found = list.find((u: any) =>
-                  isEmail
-                    ? u.email === cleanEmail || u.identifier === cleanEmail
-                    : u.phone?.replace(/\D/g, '').slice(-10) === tenDigits ||
-                      u.identifier?.replace(/\D/g, '').slice(-10) === tenDigits
-                );
-                if (found && found.password) {
-                  matchedRecord = found;
-                  matchedStoredPassword = found.password;
-                }
+          try {
+            const list = parseRegisteredFarmers(localStorage.getItem('km_registered_farmers'));
+            if (list.length > 0) {
+              const found = list.find((u) =>
+                isEmail
+                  ? u.email === cleanEmail || u.identifier === cleanEmail
+                  : u.phone?.replace(/\D/g, '').slice(-10) === tenDigits ||
+                    u.identifier?.replace(/\D/g, '').slice(-10) === tenDigits
+              );
+              if (found?.password) {
+                matchedRecord = found;
+                matchedStoredPassword = found.password;
               }
-            } catch {}
+            }
+          } catch {
+            // Ignore malformed cached registration data and continue with other login formats.
           }
         }
       }

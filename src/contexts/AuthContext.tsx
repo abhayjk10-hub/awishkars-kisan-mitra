@@ -54,6 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabase]);
 
   useEffect(() => {
+    // Hydrate the auth state from Supabase and browser storage after mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     syncUser();
 
     // Listen to Supabase auth state changes
@@ -114,4 +116,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   return useContext(AuthContext);
 }
-

@@ -15,6 +15,7 @@ import { t } from '@/lib/translations';
 import InputField from '@/components/shared/InputField';
 import PrimaryButton from '@/components/shared/PrimaryButton';
 import AlertMessage from '@/components/shared/AlertMessage';
+import { parseRegisteredFarmers } from '@/lib/registered-farmers';
 
 interface ForgotPasswordFlowProps {
   initialIdentifier?: string;
@@ -123,9 +124,8 @@ export default function ForgotPasswordFlow({
         }
 
         // Update entry in km_registered_farmers list
-        const listRaw = localStorage.getItem('km_registered_farmers');
-        const list = listRaw ? JSON.parse(listRaw) : [];
-        const existingIdx = list.findIndex((u: any) =>
+        const list = parseRegisteredFarmers(localStorage.getItem('km_registered_farmers'));
+        const existingIdx = list.findIndex((u) =>
           isEmail
             ? u.email === cleanEmail || u.identifier === cleanEmail
             : u.phone?.replace(/\D/g, '').slice(-10) === tenDigits || u.identifier === tenDigits

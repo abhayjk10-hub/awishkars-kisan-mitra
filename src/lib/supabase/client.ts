@@ -1,4 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr';
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 
 type SupabaseBrowserClient = ReturnType<typeof createBrowserClient>;
 
@@ -26,22 +27,23 @@ function createFallbackClient(): SupabaseBrowserClient {
           if (typeof window !== 'undefined') {
             const raw = localStorage.getItem('km_user_session');
             if (raw) {
-              const u = JSON.parse(raw);
-              return { data: { session: { user: u } as any }, error: null };
+              const user = JSON.parse(raw) as User;
+              return { data: { session: { user } as unknown as Session }, error: null };
             }
           }
         } catch {}
         return { data: { session: null }, error: null };
       },
-      onAuthStateChange: (callback: any) => {
+      onAuthStateChange: (callback: (event: AuthChangeEvent, session: Session | null) => void) => {
         if (typeof window === 'undefined') {
           return { data: { subscription: { unsubscribe: () => undefined } }, error: null };
         }
         const handler = () => {
           try {
             const raw = localStorage.getItem('km_user_session');
-            const u = raw ? JSON.parse(raw) : null;
-            callback(u ? 'SIGNED_IN' : 'SIGNED_OUT', u ? { user: u } : null);
+            const user = raw ? JSON.parse(raw) as User : null;
+            const session = user ? { user } as unknown as Session : null;
+            callback(user ? 'SIGNED_IN' : 'SIGNED_OUT', session);
           } catch {}
         };
         window.addEventListener('km_auth_change', handler);
@@ -54,7 +56,17 @@ function createFallbackClient(): SupabaseBrowserClient {
           error: null,
         };
       },
-      signUp: async ({ phone, email, password, options }: { phone?: string; email?: string; password?: string; options?: any }) => {
+      signUp: async ({
+        phone,
+        email,
+        password,
+        options,
+      }: {
+        phone?: string;
+        email?: string;
+        password?: string;
+        options?: { data?: { full_name?: string } };
+      }) => {
         const fullName = options?.data?.full_name || 'Farmer';
         const identifier = (phone || email || 'farmer').trim();
         const mockUser = {
@@ -68,7 +80,7 @@ function createFallbackClient(): SupabaseBrowserClient {
             localStorage.setItem(`km_reg_${identifier}`, JSON.stringify({ fullName, password }));
           }
         } catch {}
-        return { data: { user: mockUser as any, session: null }, error: null };
+        return { data: { user: mockUser as unknown as User, session: null }, error: null };
       },
       signInWithOtp: async () => ({
         data: { user: null, session: null },
@@ -113,14 +125,14 @@ function createFallbackClient(): SupabaseBrowserClient {
         } catch {}
         return {
           data: {
-            user: mockUser as any,
-            session: { user: mockUser, access_token: 'mock-session-token' } as any,
+            user: mockUser as unknown as User,
+            session: { user: mockUser, access_token: 'mock-session-token' } as unknown as Session,
           },
           error: null,
         };
       },
       updateUser: async () => ({
-        data: { user: { id: 'demo-farmer' } as any },
+        data: { user: { id: 'demo-farmer' } as unknown as User },
         error: null,
       }),
       signOut: async () => {

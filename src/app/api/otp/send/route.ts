@@ -50,9 +50,10 @@ export async function POST(request: Request) {
         gatewayNotice = data.message || 'SMS gateway pending verification';
         console.log(`⚠️ [Fast2SMS Notice]: ${gatewayNotice} (Status: ${data.status_code})`);
       }
-    } catch (netErr: any) {
-      console.log(`⚠️ [Fast2SMS Network Error]:`, netErr.message);
-      gatewayNotice = netErr.message;
+    } catch (netErr: unknown) {
+      const message = netErr instanceof Error ? netErr.message : String(netErr);
+      console.log(`⚠️ [Fast2SMS Network Error]:`, message);
+      gatewayNotice = message;
     }
 
     console.log(`🚀 [KISAN MITRA OTP]: The code for +91${normalized} is: ${code}`);

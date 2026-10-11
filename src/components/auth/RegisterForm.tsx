@@ -20,6 +20,7 @@ import { t } from '@/lib/translations';
 import InputField from '@/components/shared/InputField';
 import PrimaryButton from '@/components/shared/PrimaryButton';
 import AlertMessage from '@/components/shared/AlertMessage';
+import { parseRegisteredFarmers } from '@/lib/registered-farmers';
 
 interface RegisterFormProps {
   onSwitchToLogin?: () => void;
@@ -235,10 +236,9 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           }
 
           // Append to registered farmers list
-          const listRaw = localStorage.getItem('km_registered_farmers');
-          const list = listRaw ? JSON.parse(listRaw) : [];
+          const list = parseRegisteredFarmers(localStorage.getItem('km_registered_farmers'));
           // Update existing or add new
-          const existingIdx = list.findIndex((u: any) => 
+          const existingIdx = list.findIndex((u) =>
             isEmail 
               ? u.email === cleanEmail 
               : u.phone?.replace(/\D/g, '').slice(-10) === tenDigits

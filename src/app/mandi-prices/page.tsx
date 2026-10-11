@@ -27,6 +27,7 @@ import {
   Layers,
   HelpCircle,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import PageContainer from '@/components/shared/PageContainer';
 import MandiSelector from '@/components/shared/MandiSelector';
 import MandiPriceTicker from '@/components/shared/MandiPriceTicker';
@@ -112,6 +113,8 @@ export default function MandiPricesAdvisorPage() {
   };
 
   useEffect(() => {
+    // Geolocation is a browser API; its result initializes the page after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     requestLocation();
   }, []);
 
@@ -122,6 +125,8 @@ export default function MandiPricesAdvisorPage() {
   // Load prices whenever selected mandi changes
   useEffect(() => {
     if (!selectedMandi?.id) return;
+    // Loading state belongs to this external data request.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingPrices(true);
     getMandiPrices(selectedMandi.id)
       .then((data) => {
@@ -135,6 +140,8 @@ export default function MandiPricesAdvisorPage() {
   useEffect(() => {
     if (!selectedMandi?.id || !selectedCommodityId) return;
     const qty = Math.max(1, Number(quantityInput) || 10);
+    // Loading state belongs to this external data request.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingAdvisory(true);
     getSellingAdvisory(selectedCommodityId, qty, selectedMandi.id, userLocation)
       .then((res) => {
@@ -145,7 +152,7 @@ export default function MandiPricesAdvisorPage() {
   }, [selectedMandi?.id, selectedCommodityId, quantityInput, userLocation]);
 
   // Group prices by category
-  const categories: { id: CommodityCategory; label: string; icon: any }[] = [
+  const categories: { id: CommodityCategory; label: string; icon: LucideIcon }[] = [
     { id: 'grains_cereals', label: t('price.catGrains', language), icon: Wheat },
     { id: 'pulses', label: t('price.catPulses', language), icon: Layers },
     { id: 'vegetables', label: t('price.catVegetables', language), icon: Carrot },
