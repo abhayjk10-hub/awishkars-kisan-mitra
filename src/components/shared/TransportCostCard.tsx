@@ -20,6 +20,7 @@ interface TransportCostCardProps {
     distance_km?: number;
   };
   farmerLocation: { lat: number; lng: number } | null;
+  quantityQuintals?: number;
   onRequestLocation?: () => void;
   className?: string;
   compact?: boolean;
@@ -28,6 +29,7 @@ interface TransportCostCardProps {
 export default function TransportCostCard({
   mandi,
   farmerLocation,
+  quantityQuintals = 15,
   onRequestLocation,
   className = '',
   compact = false,
@@ -49,11 +51,11 @@ export default function TransportCostCard({
     };
 
     return calculateTransportationCost(farmerGeo, mandiGeo, {
-      ratePerKm: rate,
+      quantityQuintals,
       language,
       roundDecimals: 0,
     });
-  }, [farmerLocation, mandi.latitude, mandi.longitude, rate, language]);
+  }, [farmerLocation, mandi.latitude, mandi.longitude, quantityQuintals, language]);
 
   // Fallback if distance_km is pre-calculated but user location isn't exact
   const fallbackDistance = mandi.distance_km ?? 15;
@@ -93,8 +95,21 @@ export default function TransportCostCard({
           </div>
         </div>
 
+        {/* Vehicle Tier & Load Badge */}
+        {calculation && (
+          <div className="mt-2.5 flex items-center justify-between text-xs bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl">
+            <span className="text-emerald-300 font-medium flex items-center gap-1.5">
+              <Truck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{calculation.vehicle.name}</span>
+            </span>
+            <span className="font-bold text-white bg-white/10 px-2 py-0.5 rounded text-[11px]">
+              {calculation.quantityQuintals} Qtl • {calculation.formattedCostPerQuintal}
+            </span>
+          </div>
+        )}
+
         {/* Distance & Transit Time Badges */}
-        <div className="grid grid-cols-2 gap-2 mt-3.5">
+        <div className="grid grid-cols-2 gap-2 mt-3">
           <div className="bg-white/5 rounded-xl p-2.5 border border-white/5 flex items-center gap-2.5">
             <Navigation className="w-4 h-4 text-emerald-400 shrink-0" />
             <div>
@@ -124,37 +139,21 @@ export default function TransportCostCard({
           </div>
         </div>
 
-        {/* Rate Selection & Slider */}
-        <div className="mt-4 bg-primary-950/60 rounded-xl p-3 border border-white/5">
-          <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="text-primary-300 font-medium flex items-center gap-1">
-              <Fuel className="w-3.5 h-3.5 text-amber-400" />
-              {t('transport.rateSlider', language)}
-            </span>
-            <span className="font-extrabold text-white bg-white/10 px-2 py-0.5 rounded-md text-[11px]">
-              ₹{rate} {t('transport.perKm', language)}
-            </span>
+        {/* Quantity-Aware Breakdown Note */}
+        {calculation && (
+          <div className="mt-3 bg-primary-950/60 rounded-xl p-2.5 border border-white/5 text-[11px] text-primary-300">
+            <div className="flex justify-between text-[10px] text-primary-300 mb-1">
+              <span>{t('transport.effectiveRate', language)}:</span>
+              <strong className="text-white font-bold">{calculation.formattedRate}</strong>
+            </div>
+            <div className="grid grid-cols-2 gap-1 text-[10px] text-primary-400 pt-1 border-t border-white/5">
+              <span>{t('transport.baseFee', language)}: ₹{calculation.breakdown.baseMobilization}</span>
+              <span>{t('transport.distanceRun', language)}: ₹{calculation.breakdown.distanceCost}</span>
+              <span>{t('transport.loadFreight', language)}: ₹{calculation.breakdown.weightFreightCost}</span>
+              <span>{t('transport.dockHandling', language)}: ₹{calculation.breakdown.handlingCost}</span>
+            </div>
           </div>
-
-          <input
-            type="range"
-            min={MIN_TRANSPORT_RATE}
-            max={MAX_TRANSPORT_RATE}
-            step={0.5}
-            value={rate}
-            onChange={(e) => setRate(parseFloat(e.target.value))}
-            className="w-full accent-emerald-400 cursor-pointer h-1.5 bg-white/20 rounded-lg appearance-none"
-            aria-label={t('transport.rateSlider', language)}
-          />
-
-          <div className="flex justify-between text-[10px] text-primary-400 mt-1">
-            <span>₹{MIN_TRANSPORT_RATE}/km</span>
-            <span className="text-emerald-300 font-semibold">
-              ₹{DEFAULT_TRANSPORT_RATE}/km ({t('common.selectLanguage', language) === 'Select language' ? 'Standard' : 'मानक'})
-            </span>
-            <span>₹{MAX_TRANSPORT_RATE}/km</span>
-          </div>
-        </div>
+        )}
 
         {/* Live GPS status / prompt */}
         {!farmerLocation && onRequestLocation && (

@@ -9,17 +9,67 @@ export interface GeoLocation {
 }
 
 /**
- * Cost bounds per user requirements (50 to 85 ₹ per kilometer).
+ * Geographic coordinates (latitude and longitude).
+ */
+export interface GeoLocation {
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * Quantity-Aware Agricultural Transport Economics Configuration
+ * In Indian rural logistics, flat per-km rates fail because moving 10 tonnes of grain
+ * requires distinct commercial vehicle classes, fuel burn, driver wages, and loading labor.
+ */
+export interface AgriTransportConfig {
+  /** Base mobilization & positioning fee in ₹ (minimum trip charge) */
+  baseMobilizationFee: number;
+  /** Distance base rate in ₹/km for vehicle operation */
+  baseRatePerKm: number;
+  /** Freight load factor in ₹/quintal/km (standard ~₹8/tonne-km) */
+  ratePerQuintalKm: number;
+  /** Mandi yard loading & unloading handling fee in ₹/quintal */
+  handlingPerQuintal: number;
+}
+
+export const DEFAULT_TRANSPORT_CONFIG: AgriTransportConfig = {
+  baseMobilizationFee: 350, // Minimum vehicle engagement & dock placement fee
+  baseRatePerKm: 24,        // Base vehicle running rate per km (diesel + driver)
+  ratePerQuintalKm: 0.85,   // Freight tariff per quintal per km (~₹8.50 per ton-km)
+  handlingPerQuintal: 12,   // Hamali / mandi yard loading & unloading labor per quintal
+};
+
+/** Vehicle classification tiers according to crop load in quintals */
+export interface VehicleTier {
+  id: string;
+  name: string;
+  hindiName: string;
+  maxQuintals: number;
+  baseRatePerKm: number;
+  baseMobilization: number;
+}
+
+export const VEHICLE_TIERS: VehicleTier[] = [
+  { id: 'mini_tempo', name: 'Mini Tempo (Tata Ace)', hindiName: 'छोटा हाथी / टेम्पो', maxQuintals: 15, baseRatePerKm: 22, baseMobilization: 350 },
+  { id: 'pickup', name: 'Pickup Truck (Bolero Maxi)', hindiName: 'पिकअप ट्रक', maxQuintals: 35, baseRatePerKm: 26, baseMobilization: 450 },
+  { id: 'tractor', name: 'Tractor Trolley', hindiName: 'ट्रैक्टर ट्रॉली', maxQuintals: 75, baseRatePerKm: 32, baseMobilization: 600 },
+  { id: 'heavy_truck', name: 'Commercial Truck (6-Wheeler)', hindiName: 'कमर्शियल ट्रक', maxQuintals: 250, baseRatePerKm: 42, baseMobilization: 950 },
+];
+
+/**
+ * Backward-compatible rate bounds for legacy ratePerKm slider
  */
 export const MIN_TRANSPORT_RATE = 50;
-export const MAX_TRANSPORT_RATE = 85;
+export const MAX_TRANSPORT_RATE = 120;
 export const DEFAULT_TRANSPORT_RATE = 65;
 
 export interface TransportCostOptions {
+  /** Quantity of crop in quintals (1 quintal = 100 kg). Defaults to 15 Qtl. */
+  quantityQuintals?: number;
+
   /**
-   * Configurable transportation rate in ₹/km.
-   * Clamped between MIN_TRANSPORT_RATE (50) and MAX_TRANSPORT_RATE (85).
-   * Defaults to 65 ₹/km.
+   * Optional manual override rate per km.
+   * If provided, overrides dynamic vehicle rate.
    */
   ratePerKm?: number;
 
@@ -32,7 +82,7 @@ export interface TransportCostOptions {
 
   /**
    * Number of decimal places to round the final rupee cost.
-   * Defaults to 2.
+   * Defaults to 0.
    */
   roundDecimals?: number;
 }
@@ -40,19 +90,34 @@ export interface TransportCostOptions {
 export interface TransportCostResult {
   /** Distance in kilometers (accurate Haversine calculation) */
   distanceKm: number;
-  /** Effective rate applied in ₹/km (between 50 and 85) */
+  /** Quantity of produce in quintals */
+  quantityQuintals: number;
+  /** Recommended vehicle tier */
+  vehicle: VehicleTier;
+  /** Effective rate applied in ₹/km */
   ratePerKm: number;
   /** Total calculated cost in Indian Rupees */
   totalCost: number;
-  /** Formatted cost string with ₹ symbol (e.g., "₹387.50") */
+  /** Cost per quintal in Indian Rupees */
+  costPerQuintal: number;
+  /** Detailed cost components breakdown */
+  breakdown: {
+    baseMobilization: number;
+    distanceCost: number;
+    weightFreightCost: number;
+    handlingCost: number;
+  };
+  /** Formatted cost string with ₹ symbol (e.g., "₹1,250") */
   formattedCost: string;
+  /** Formatted cost per quintal string (e.g., "₹83/Qtl") */
+  formattedCostPerQuintal: string;
   /** Formatted distance string (e.g., "25.0 km") */
   formattedDistance: string;
-  /** Formatted rate string (e.g., "₹15.5/km") */
+  /** Formatted rate string (e.g., "₹52/km") */
   formattedRate: string;
-  /** Estimated transit duration in minutes (based on 30 km/h agri-transport) */
+  /** Estimated transit duration in minutes */
   estimatedTransitMinutes: number;
-  /** Localized human-readable duration (e.g., "50 mins" or "1h 15m") */
+  /** Localized human-readable duration */
   formattedTransitTime: string;
   /** Localized full summary message */
   summary: string;
@@ -149,14 +214,14 @@ export function getFarmerCurrentLocation(
 /**
  * Calculates the transportation cost from the farmer's location to a mandi location.
  *
- * Distance is computed using the Haversine formula and multiplied by a rate
- * between 50 and 85 ₹/km (default: 65 ₹/km). All labels and summaries are
- * returned in the requested language (English, Hindi, Marathi, Gujarati, Punjabi).
+ * Distance is computed using the Haversine formula and multiplied by a realistic,
+ * quantity-aware agricultural freight model accounting for vehicle class, fuel running,
+ * weight load factor per quintal-km, and loading/unloading handling charges.
  *
  * @param farmerLocation Farmer's GPS coordinate
  * @param mandiLocation Mandi's GPS coordinate
- * @param options Configuration options (ratePerKm, language, roundDecimals)
- * @returns Comprehensive, multilingual TransportCostResult
+ * @param options Configuration options (quantityQuintals, ratePerKm, language, roundDecimals)
+ * @returns Comprehensive, multilingual, quantity-aware TransportCostResult
  */
 export function calculateTransportationCost(
   farmerLocation: GeoLocation,
@@ -164,13 +229,14 @@ export function calculateTransportationCost(
   options: TransportCostOptions = {}
 ): TransportCostResult {
   const {
-    ratePerKm = DEFAULT_TRANSPORT_RATE,
+    quantityQuintals = 15,
+    ratePerKm,
     language = 'en',
-    roundDecimals = 2,
+    roundDecimals = 0,
   } = options;
 
-  // Ensure rate stays within the defined 50-85 ₹/km range
-  const validRate = Math.min(Math.max(ratePerKm, MIN_TRANSPORT_RATE), MAX_TRANSPORT_RATE);
+  // Sanitized quantity
+  const qty = Math.max(1, Number(quantityQuintals) || 15);
 
   // Compute distance via Haversine
   const distanceKm = calculateHaversineDistanceKm(
@@ -180,10 +246,29 @@ export function calculateTransportationCost(
     mandiLocation.longitude
   );
 
-  // Total cost calculation
-  const rawCost = distanceKm * validRate;
+  // Select appropriate vehicle tier based on quantity load
+  const vehicle =
+    VEHICLE_TIERS.find((v) => qty <= v.maxQuintals) ||
+    VEHICLE_TIERS[VEHICLE_TIERS.length - 1];
+
+  // If manual rate override is passed, use it for base distance running
+  const effectiveBaseKmRate =
+    ratePerKm !== undefined
+      ? Math.min(Math.max(ratePerKm, MIN_TRANSPORT_RATE), MAX_TRANSPORT_RATE)
+      : vehicle.baseRatePerKm;
+
+  // Cost components
+  const baseMobilization = vehicle.baseMobilization;
+  const distanceCost = distanceKm * effectiveBaseKmRate;
+  const weightFreightCost = qty * distanceKm * DEFAULT_TRANSPORT_CONFIG.ratePerQuintalKm;
+  const handlingCost = qty * DEFAULT_TRANSPORT_CONFIG.handlingPerQuintal;
+
+  const rawTotal = baseMobilization + distanceCost + weightFreightCost + handlingCost;
   const factor = Math.pow(10, roundDecimals);
-  const totalCost = Math.round(rawCost * factor) / factor;
+  const totalCost = Math.round(rawTotal * factor) / factor;
+
+  const effectiveRatePerKm = distanceKm > 0 ? Math.round((totalCost / distanceKm) * 10) / 10 : effectiveBaseKmRate;
+  const costPerQuintal = Math.round((totalCost / qty) * 10) / 10;
 
   // Transit time estimation (~30 km/h average speed for rural agri-cargo / tractor)
   const estimatedTransitMinutes = Math.max(10, Math.round((distanceKm / 30) * 60));
@@ -200,23 +285,37 @@ export function calculateTransportationCost(
     maximumFractionDigits: roundDecimals,
   })}`;
 
+  const formattedCostPerQuintal = `₹${costPerQuintal.toLocaleString('en-IN', {
+    maximumFractionDigits: 1,
+  })}/Qtl`;
+
   const formattedDistance = `${distanceKm.toFixed(1)} km`;
-  const formattedRate = `₹${validRate}${t('transport.perKm', language)}`;
+  const formattedRate = `₹${effectiveRatePerKm}${t('transport.perKm', language)}`;
 
   const summary = t('transport.summary', language, {
     cost: totalCost.toLocaleString('en-IN', {
       minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
+      maximumFractionDigits: 0,
     }),
     distance: distanceKm.toFixed(1),
-    rate: validRate,
+    rate: Math.round(effectiveRatePerKm),
   });
 
   return {
     distanceKm,
-    ratePerKm: validRate,
+    quantityQuintals: qty,
+    vehicle,
+    ratePerKm: effectiveRatePerKm,
     totalCost,
+    costPerQuintal,
+    breakdown: {
+      baseMobilization,
+      distanceCost: Math.round(distanceCost),
+      weightFreightCost: Math.round(weightFreightCost),
+      handlingCost: Math.round(handlingCost),
+    },
     formattedCost,
+    formattedCostPerQuintal,
     formattedDistance,
     formattedRate,
     estimatedTransitMinutes,

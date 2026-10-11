@@ -334,3 +334,16 @@ input[type="radio"] {
   .token-marquee-inner { padding: 8px 14px; gap: 0; }
   .token-marquee-divider { margin: 0 10px; height: 24px; }
 }
+
+@keyframes marquee-scroll {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee-ticker {
+  animation: marquee-scroll 32s linear infinite;
+}
+.animate-marquee-ticker:hover {
+  animation-play-state: paused;
+}
+

@@ -39,7 +39,7 @@ export default function HomePageContent() {
 
       <GovernmentSchemes />
 
-      <ScrollReveal className="archive-footer-cta"><div><p className="archive-eyebrow">{t('home.footerEyebrow', language)}</p><h2>{t('home.footerTitle', language)}</h2></div><div className="footer-cta-actions"><MagneticLink href="/login" className="archive-cta">{t('home.getStarted', language)} <ArrowUpRight /></MagneticLink><a href="tel:+917700037441" className="archive-phone"><Phone /> +91 7700037441</a></div></ScrollReveal>
+      <ScrollReveal className="archive-footer-cta"><div><p className="archive-eyebrow">{t('home.footerEyebrow', language)}</p><h2>{t('home.footerTitle', language)}</h2></div><div className="footer-cta-actions"><MagneticLink href="/login" className="archive-cta">{t('home.getStarted', language)} <ArrowUpRight /></MagneticLink><a href="tel:1800-180-1551" className="archive-phone"><Phone /> 1800-180-1551</a></div></ScrollReveal>
       <FarmerChatbot />
     </main>
   );

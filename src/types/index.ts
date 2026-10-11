@@ -45,7 +45,7 @@ export interface ChatResponsePayload {
   }[];
 }
 
-export type SlotStatus = 'waiting' | 'active' | 'completed' | 'no-show' | 'cancelled';
+export type SlotStatus = 'waiting' | 'active' | 'completed' | 'no-show' | 'cancelled' | 'waitlisted';
 
 export interface Mandi {
   id: string;
@@ -83,6 +83,9 @@ export interface SlotBooking {
   slot_start_time: string; // HH:MM
   slot_end_time: string; // HH:MM (30 min window)
   status: SlotStatus;
+  waitlist_position?: number;
+  cancellation_reason?: string;
+  cancelled_at?: string;
   is_walkin: boolean;
   arrival_time?: string;
   completion_time?: string;

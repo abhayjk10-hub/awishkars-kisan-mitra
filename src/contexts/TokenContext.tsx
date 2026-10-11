@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 
-export type TokenStatus = 'waiting' | 'approaching' | 'now' | 'completed' | 'no-show' | null;
+export type TokenStatus = 'waiting' | 'approaching' | 'now' | 'completed' | 'no-show' | 'waitlisted' | 'cancelled' | null;
 
 export interface TokenData {
   tokenNumber: string;
@@ -12,6 +12,10 @@ export interface TokenData {
   status: TokenStatus;
   estimatedWaitMinutes: number;
   slotTime: string;
+  bookingDate?: string;
+  dayOfWeek?: string;
+  cropName?: string;
+  quantity?: number;
   bookingId?: string;
   farmerPhone?: string;
 }
@@ -60,10 +64,12 @@ export function TokenProvider({ children }: { children: ReactNode }) {
         else if (newStatus === 'completed') mappedStatus = 'completed';
         else if (newStatus === 'no-show') mappedStatus = 'no-show';
         else if (newStatus === 'waiting') mappedStatus = 'waiting';
+        else if (newStatus === 'waitlisted') mappedStatus = 'waitlisted';
+        else if (newStatus === 'cancelled') mappedStatus = 'cancelled';
 
         setTokenState((prev) => {
           if (!prev) return null;
-          const updated = {
+          const updated: TokenData = {
             ...prev,
             status: mappedStatus,
             totalAhead: mappedStatus === 'now' ? 0 : prev.totalAhead,

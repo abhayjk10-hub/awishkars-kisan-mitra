@@ -39,7 +39,7 @@ const CONFIG = {
   // If left blank, it automatically creates a new Sheet in your Google Drive
   // and remembers it across all future submissions.
   // (You can also paste an existing Sheet ID here if you want to use a specific one)
-  SPREADSHEET_ID: '', 
+  SPREADSHEET_ID: '',
 
   // Name of the tab inside the spreadsheet
   SHEET_TAB_NAME: 'Submissions',
@@ -90,7 +90,7 @@ function getOrCreateSpreadsheet() {
   const newSs = SpreadsheetApp.create(CONFIG.SPREADSHEET_TITLE);
   scriptProps.setProperty('KM_SPREADSHEET_ID', newSs.getId());
   Logger.log('✅ Sheet successfully created! URL: ' + newSs.getUrl());
-  
+
   return newSs;
 }
 
@@ -99,7 +99,7 @@ function getOrCreateSpreadsheet() {
  */
 function getOrCreateSheetTab(ss) {
   let sheet = ss.getSheetByName(CONFIG.SHEET_TAB_NAME);
-  
+
   if (!sheet) {
     sheet = ss.insertSheet(CONFIG.SHEET_TAB_NAME);
 
@@ -108,7 +108,7 @@ function getOrCreateSheetTab(ss) {
     if (defaultSheet && ss.getSheets().length > 1) {
       try {
         if (defaultSheet.getLastRow() === 0) ss.deleteSheet(defaultSheet);
-      } catch (err) {}
+      } catch (err) { }
     }
 
     // Set Column Headers
@@ -145,7 +145,7 @@ function getOrCreateSheetTab(ss) {
 
     // Enable text wrapping for Message column
     sheet.getRange('E:E').setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
-    
+
     // Status Column Validation Dropdown (Col F)
     const statusRule = SpreadsheetApp.newDataValidation()
       .requireValueInList(['Pending Review', 'In Progress', 'Resolved', 'Closed'], true)
@@ -165,7 +165,7 @@ function sendEmailAlert(data, spreadsheetUrl) {
     let recipientEmail = '';
     try {
       recipientEmail = Session.getEffectiveUser().getEmail();
-    } catch (e) {}
+    } catch (e) { }
 
     if (!recipientEmail || recipientEmail.indexOf('@') === -1) {
       recipientEmail = CONFIG.FALLBACK_EMAIL;
@@ -360,11 +360,11 @@ function doGet(e) {
     const sheet = getOrCreateSheetTab(ss);
     const url = ss.getUrl();
     const totalRows = Math.max(0, sheet.getLastRow() - 1);
-    
+
     let userEmail = 'ismparam786@gmail.com';
     try {
       userEmail = Session.getEffectiveUser().getEmail() || userEmail;
-    } catch (err) {}
+    } catch (err) { }
 
     const html = `
       <!DOCTYPE html>
@@ -454,7 +454,7 @@ function testFullFlow() {
 
   const response = doPost(mockEvent);
   const resultJson = JSON.parse(response.getContent());
-  
+
   Logger.log('───────────────────────────────────────────────────');
   Logger.log('🎉 RESULT: ' + (resultJson.success ? 'SUCCESS!' : 'FAILED'));
   Logger.log('📊 Google Sheet URL: ' + resultJson.spreadsheetUrl);

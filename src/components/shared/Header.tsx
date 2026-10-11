@@ -61,6 +61,7 @@ export default function Header() {
     { href: '/', label: t('nav.home', language) },
     { href: '/slot-booking', label: t('nav.slotBooking', language) },
     ...(isMandiOperator ? [{ href: '/mandi/dashboard', label: t('nav.mandiDashboard', language) }] : []),
+    { href: '/mandi-prices', label: t('nav.mandiPrices', language) },
     { href: '/contact', label: t('nav.contact', language) },
   ];
 

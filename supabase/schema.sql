@@ -51,7 +51,10 @@ CREATE TABLE IF NOT EXISTS slot_bookings (
   slot_start_time TIME NOT NULL,
   slot_end_time TIME NOT NULL, -- exactly 30 minutes after start_time
   status TEXT NOT NULL DEFAULT 'waiting' 
-    CHECK (status IN ('waiting', 'active', 'completed', 'no-show', 'cancelled')),
+    CHECK (status IN ('waiting', 'active', 'completed', 'no-show', 'cancelled', 'waitlisted')),
+  waitlist_position INTEGER DEFAULT NULL,
+  cancellation_reason TEXT DEFAULT NULL,
+  cancelled_at TIMESTAMPTZ DEFAULT NULL,
   is_walkin BOOLEAN NOT NULL DEFAULT false,
   arrival_time TIMESTAMPTZ,
   completion_time TIMESTAMPTZ,

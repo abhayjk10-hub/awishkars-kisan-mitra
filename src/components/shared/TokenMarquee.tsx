@@ -9,6 +9,8 @@ import { t } from '@/lib/translations';
 function getStatusLabel(status: TokenStatus, ahead: number, lang: any): string {
   if (status === 'completed') return `✅ ${t('token.statusCompleted', lang)}`;
   if (status === 'no-show') return `⚠️ ${t('slot.delayWarning', lang)}`;
+  if (status === 'cancelled') return `❌ ${t('slot.statusCancelled', lang)}`;
+  if (status === 'waitlisted') return `⏳ ${t('slot.statusWaitlisted', lang)}`;
   if (status === 'now') return `🚨 ${t('token.statusCalled', lang)}`;
   if (status === 'approaching') return `⚡ ${t('token.statusWeighing', lang)} (${ahead})`;
   return `${ahead} ${t('token.statusWaiting', lang)}`;
@@ -16,7 +18,8 @@ function getStatusLabel(status: TokenStatus, ahead: number, lang: any): string {
 
 function getStatusColor(status: TokenStatus): string {
   if (status === 'completed') return 'bg-emerald-900 border-emerald-500 text-white';
-  if (status === 'no-show') return 'bg-red-950 border-red-500 text-red-200';
+  if (status === 'no-show' || status === 'cancelled') return 'bg-red-950 border-red-500 text-red-200';
+  if (status === 'waitlisted') return 'bg-amber-950 border-amber-500 text-amber-200';
   if (status === 'now') return 'token-marquee--now';
   if (status === 'approaching') return 'token-marquee--approaching';
   return 'token-marquee--waiting';
@@ -60,6 +63,16 @@ export default function TokenMarquee() {
           <MapPin />
           <span>{token.mandiName}</span>
         </div>
+
+        {/* Date and Day of Week */}
+        {token.bookingDate && (
+          <>
+            <div className="token-marquee-divider" aria-hidden="true" />
+            <div className="token-marquee-info">
+              <span>📅 {token.dayOfWeek ? `${token.dayOfWeek}, ` : ''}{token.bookingDate}</span>
+            </div>
+          </>
+        )}
 
         <div className="token-marquee-divider" aria-hidden="true" />
 

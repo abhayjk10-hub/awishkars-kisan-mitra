@@ -164,6 +164,14 @@ export default function MandiDashboardPage() {
       if (event?.type === 'SLOT_BOOKED' && event.payload) {
         setToastMessage(`🚨 New Farmer Booking: #${event.payload.token_number} (${event.payload.farmer_name})`);
         setTimeout(() => setToastMessage(null), 5000);
+      } else if (event?.type === 'SLOT_CANCELLED') {
+        const payload = event.payload;
+        setToastMessage(`⚠️ Slot Freed by Cancellation: #${payload?.booking?.token_number || payload?.bookingId}`);
+        setTimeout(() => setToastMessage(null), 5000);
+      } else if (event?.type === 'SLOT_PROMOTED') {
+        const payload = event.payload;
+        setToastMessage(`🎉 Waitlist Auto-Assigned: #${payload?.booking?.token_number} (${payload?.booking?.farmer_name}) promoted to slot!`);
+        setTimeout(() => setToastMessage(null), 7000);
       }
     });
 
@@ -287,7 +295,9 @@ export default function MandiDashboardPage() {
     const active = queue.filter((b) => b.status === 'active').length;
     const completed = queue.filter((b) => b.status === 'completed').length;
     const noshow = queue.filter((b) => b.status === 'no-show').length;
-    return { total, waiting, active, completed, noshow };
+    const waitlisted = queue.filter((b) => b.status === 'waitlisted').length;
+    const cancelled = queue.filter((b) => b.status === 'cancelled').length;
+    return { total, waiting, active, completed, noshow, waitlisted, cancelled };
   }, [queue]);
 
   if (loading || !session) {
@@ -484,11 +494,13 @@ export default function MandiDashboardPage() {
                   onChange={(e) => setStatusFilter(e.target.value as any)}
                   className="text-xs font-semibold px-3 py-2 rounded-xl border border-primary-200 text-primary-800 bg-white"
                 >
-                  <option value="all">All Statuses</option>
-                  <option value="waiting">Waiting Only</option>
-                  <option value="active">Active Only</option>
-                  <option value="completed">Completed Only</option>
-                  <option value="no-show">No-Show Only</option>
+                  <option value="all">All Statuses ({metrics.total})</option>
+                  <option value="waiting">Waiting Only ({metrics.waiting})</option>
+                  <option value="active">Active Only ({metrics.active})</option>
+                  <option value="completed">Completed Only ({metrics.completed})</option>
+                  <option value="no-show">No-Show Only ({metrics.noshow})</option>
+                  <option value="waitlisted">Waitlisted Queue ({metrics.waitlisted})</option>
+                  <option value="cancelled">Cancelled Slots ({metrics.cancelled})</option>
                 </select>
               </div>
 
@@ -529,6 +541,8 @@ export default function MandiDashboardPage() {
                   const isActive = booking.status === 'active';
                   const isCompleted = booking.status === 'completed';
                   const isNoShow = booking.status === 'no-show';
+                  const isWaitlisted = booking.status === 'waitlisted';
+                  const isCancelled = booking.status === 'cancelled';
 
                   return (
                     <div
@@ -538,6 +552,10 @@ export default function MandiDashboardPage() {
                           ? 'border-emerald-500 bg-emerald-50/50 shadow-md ring-2 ring-emerald-500/20'
                           : isNoShow
                           ? 'border-red-200 bg-red-50/30'
+                          : isWaitlisted
+                          ? 'border-indigo-200 bg-indigo-50/40'
+                          : isCancelled
+                          ? 'border-primary-100 bg-primary-50/20 opacity-60'
                           : isCompleted
                           ? 'border-primary-100 bg-primary-50/20 opacity-75'
                           : 'border-primary-200 bg-white hover:border-primary-300'
@@ -558,6 +576,10 @@ export default function MandiDashboardPage() {
                                   ? 'bg-emerald-600 text-white animate-pulse'
                                   : isNoShow
                                   ? 'bg-red-600 text-white'
+                                  : isWaitlisted
+                                  ? 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                                  : isCancelled
+                                  ? 'bg-red-100 text-red-800 border border-red-300'
                                   : isCompleted
                                   ? 'bg-primary-200 text-primary-900'
                                   : 'bg-amber-100 text-amber-900 border border-amber-300'
@@ -565,10 +587,12 @@ export default function MandiDashboardPage() {
                             >
                               <span
                                 className={`w-1.5 h-1.5 rounded-full ${
-                                  isActive ? 'bg-white' : isNoShow ? 'bg-white' : isCompleted ? 'bg-primary-700' : 'bg-amber-600'
+                                  isActive ? 'bg-white' : isNoShow ? 'bg-white' : isWaitlisted ? 'bg-indigo-600' : isCancelled ? 'bg-red-600' : isCompleted ? 'bg-primary-700' : 'bg-amber-600'
                                 }`}
                               />
-                              {booking.status}
+                              {isWaitlisted && booking.waitlist_position
+                                ? `Waitlist #${booking.waitlist_position}`
+                                : booking.status}
                             </span>
 
                             {booking.is_walkin && (
@@ -642,12 +666,32 @@ export default function MandiDashboardPage() {
                                 <button
                                   type="button"
                                   onClick={() => handleOpenDelayModal(booking)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs transition-colors"
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs transition-colors"
                                 >
                                   <AlertTriangle className="w-3.5 h-3.5" />
                                   <span>No-Show / Late</span>
                                 </button>
                               </>
+                            )}
+
+                            {booking.status === 'waitlisted' && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await updateTokenStatus(booking.id, 'waiting');
+                                  refreshQueue();
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-sm transition-all"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Promote to Queue</span>
+                              </button>
+                            )}
+
+                            {booking.status === 'cancelled' && (
+                              <span className="text-xs font-medium text-red-700 bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl">
+                                {booking.cancellation_reason || 'Cancelled'}
+                              </span>
                             )}
 
                             {booking.status === 'active' && (

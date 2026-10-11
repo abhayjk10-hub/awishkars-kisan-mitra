@@ -1,5 +1,6 @@
 import { createClient } from './supabase/client';
 import { Mandi, SlotBooking, FarmerDelay, SlotStatus, MandiRegistrationInput, MandiSession } from '@/types';
+export type { Mandi };
 
 // Default seed mandis (Maharashtra APMC Market Yards with real coordinates)
 export const DEFAULT_MANDIS: Mandi[] = [
@@ -420,10 +421,23 @@ export async function createSlotBooking(input: CreateSlotBookingInput): Promise<
     endTime = `${String(Math.floor(totalMin / 60)).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
   }
 
-  // Get current bookings to determine sequence
+  // Get current bookings to determine sequence and capacity
   const existing = await getMandiQueue(input.mandi_id, input.booking_date);
   const seq = existing.length + 1;
   const tokenNumber = generateTokenNumber(input.mandi_id, input.booking_date, seq);
+
+  // Check capacity for this specific 30-min window
+  const mandi = await getMandiById(input.mandi_id);
+  const capacity = mandi?.slot_capacity || 6;
+  const activeInSlot = existing.filter(
+    (b) => b.slot_start_time === input.slot_start_time && (b.status === 'waiting' || b.status === 'active')
+  );
+
+  const isFull = activeInSlot.length >= capacity;
+  const initialStatus: SlotStatus = isFull ? 'waitlisted' : 'waiting';
+  const waitlistPos = isFull
+    ? existing.filter((b) => b.slot_start_time === input.slot_start_time && b.status === 'waitlisted').length + 1
+    : undefined;
 
   const newBooking: SlotBooking = {
     id: 'booking-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8),
@@ -439,7 +453,8 @@ export async function createSlotBooking(input: CreateSlotBookingInput): Promise<
     booking_date: input.booking_date,
     slot_start_time: input.slot_start_time,
     slot_end_time: endTime,
-    status: 'waiting',
+    status: initialStatus,
+    waitlist_position: waitlistPos,
     is_walkin: Boolean(input.is_walkin),
     created_at: new Date().toISOString(),
   };
@@ -616,10 +631,284 @@ export async function updateTokenStatus(
     }
   }
 
+  // If status is 'no-show' or 'cancelled', vacate slot and automatically promote next waitlisted farmer
+  let promotedBooking: SlotBooking | null = null;
+  if ((newStatus === 'no-show' || newStatus === 'cancelled') && (updatedBooking || localList.find((b) => b.id === bookingId))) {
+    const target = updatedBooking || localList.find((b) => b.id === bookingId);
+    if (target) {
+      promotedBooking = await promoteNextWaitlistedFarmer(target.mandi_id, target.booking_date, target.slot_start_time);
+    }
+  }
+
   // Broadcast token update
-  notifyBroadcast('TOKEN_STATUS_UPDATED', { bookingId, status: newStatus, booking: updatedBooking });
+  notifyBroadcast('TOKEN_STATUS_UPDATED', { bookingId, status: newStatus, booking: updatedBooking, promotedBooking });
 
   return { success: true, booking: updatedBooking };
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * FARMER-SIDE SLOT CANCELLATION & WAITLIST AUTOMATION
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Validates whether a slot booking is eligible for cancellation.
+ * STRICT RULE: Farmer can cancel ONLY up to one day before the slot date.
+ * Same-day or past cancellations are strictly blocked.
+ */
+export function canCancelSlotBooking(bookingDate: string): { allowed: boolean; reasonKey?: string; message: string } {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const [y, m, d] = bookingDate.split('-').map(Number);
+  const slotDate = new Date(y, m - 1, d);
+  slotDate.setHours(0, 0, 0, 0);
+
+  const diffMs = slotDate.getTime() - today.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) {
+    return {
+      allowed: false,
+      reasonKey: 'slot.cancellationBlockedSameDay',
+      message: 'Cancellations are only allowed up to 1 day before the scheduled slot date. Cancellations on the slot date or later are locked to maintain orderly APMC yard weighbridge operations.',
+    };
+  }
+
+  return {
+    allowed: true,
+    message: 'Eligible for cancellation.',
+  };
+}
+
+/**
+ * Promotes the next waitlisted farmer for a vacated slot.
+ */
+export async function promoteNextWaitlistedFarmer(
+  mandiId: string,
+  bookingDate: string,
+  slotStartTime: string
+): Promise<SlotBooking | null> {
+  const supabase = createClient();
+  let promotedBooking: SlotBooking | null = null;
+
+  try {
+    // 1. Try PostgreSQL function if available in database
+    const { data: rpcPromotedId } = await supabase.rpc('promote_next_waitlisted_farmer', {
+      p_mandi_id: mandiId,
+      p_booking_date: bookingDate,
+      p_slot_start_time: slotStartTime,
+    });
+
+    if (rpcPromotedId) {
+      const { data } = await supabase.from('slot_bookings').select('*').eq('id', rpcPromotedId).single();
+      if (data) promotedBooking = data as SlotBooking;
+    } else {
+      // 2. Direct query fallback
+      const { data: waitlisted } = await supabase
+        .from('slot_bookings')
+        .select('*')
+        .eq('mandi_id', mandiId)
+        .eq('booking_date', bookingDate)
+        .eq('slot_start_time', slotStartTime)
+        .eq('status', 'waitlisted')
+        .order('waitlist_position', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true })
+        .limit(1);
+
+      if (waitlisted && waitlisted.length > 0) {
+        const target = waitlisted[0];
+        const { data: updated } = await supabase
+          .from('slot_bookings')
+          .update({ status: 'waiting', waitlist_position: null })
+          .eq('id', target.id)
+          .select()
+          .single();
+        if (updated) promotedBooking = updated as SlotBooking;
+      }
+    }
+  } catch {
+    // Supabase query fallback handled below
+  }
+
+  // 3. Update local cache
+  const localList = getLocalCache<SlotBooking[]>(STORAGE_BOOKINGS, []);
+  const waitlistIndex = localList.findIndex(
+    (b) =>
+      b.mandi_id === mandiId &&
+      b.booking_date === bookingDate &&
+      b.slot_start_time === slotStartTime &&
+      b.status === 'waitlisted'
+  );
+
+  if (waitlistIndex !== -1) {
+    localList[waitlistIndex] = {
+      ...localList[waitlistIndex],
+      status: 'waiting',
+      waitlist_position: undefined,
+    };
+    if (!promotedBooking) {
+      promotedBooking = localList[waitlistIndex];
+    }
+    setLocalCache(STORAGE_BOOKINGS, localList);
+  }
+
+  if (promotedBooking) {
+    notifyBroadcast('SLOT_PROMOTED', {
+      booking: promotedBooking,
+      farmerPhone: promotedBooking.farmer_phone,
+      bookingId: promotedBooking.id,
+    });
+    notifyBroadcast('TOKEN_STATUS_UPDATED', {
+      bookingId: promotedBooking.id,
+      status: 'waiting',
+      booking: promotedBooking,
+    });
+  }
+
+  return promotedBooking;
+}
+
+/**
+ * Cancels a farmer's slot booking with 1-day advance notice validation,
+ * frees the slot in Supabase, and reassigns it to the next waitlisted farmer.
+ */
+export async function cancelSlotBooking(
+  bookingId: string,
+  reason: string = 'Cancelled by farmer'
+): Promise<{ success: boolean; error?: string; booking?: SlotBooking; promotedBooking?: SlotBooking | null }> {
+  const localList = getLocalCache<SlotBooking[]>(STORAGE_BOOKINGS, []);
+  const localBooking = localList.find((b) => b.id === bookingId);
+
+  const supabase = createClient();
+  let bookingDate = localBooking?.booking_date;
+  let targetMandiId = localBooking?.mandi_id;
+  let targetSlotTime = localBooking?.slot_start_time;
+
+  // Retrieve details from Supabase if not found locally
+  if (!bookingDate) {
+    try {
+      const { data } = await supabase.from('slot_bookings').select('*').eq('id', bookingId).single();
+      if (data) {
+        bookingDate = data.booking_date;
+        targetMandiId = data.mandi_id;
+        targetSlotTime = data.slot_start_time;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!bookingDate) {
+    return { success: false, error: 'Booking record not found.' };
+  }
+
+  // 1-Day rule check
+  const check = canCancelSlotBooking(bookingDate);
+  if (!check.allowed) {
+    return { success: false, error: check.message };
+  }
+
+  const nowIso = new Date().toISOString();
+  let updatedBooking: SlotBooking | undefined;
+
+  // 1. Try Supabase RPC or direct update
+  try {
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc('cancel_farmer_slot', {
+      p_booking_id: bookingId,
+      p_reason: reason,
+    });
+
+    if (rpcErr) {
+      await supabase
+        .from('slot_bookings')
+        .update({
+          status: 'cancelled',
+          cancelled_at: nowIso,
+          cancellation_reason: reason,
+        })
+        .eq('id', bookingId);
+    }
+  } catch {
+    // fallback
+  }
+
+  // 2. Update local cache
+  const idx = localList.findIndex((b) => b.id === bookingId);
+  if (idx !== -1) {
+    localList[idx] = {
+      ...localList[idx],
+      status: 'cancelled',
+      cancelled_at: nowIso,
+      cancellation_reason: reason,
+    };
+    updatedBooking = localList[idx];
+    setLocalCache(STORAGE_BOOKINGS, localList);
+  }
+
+  // 3. Automatically promote next waitlisted farmer for this exact slot
+  let promotedBooking: SlotBooking | null = null;
+  if (targetMandiId && bookingDate && targetSlotTime) {
+    promotedBooking = await promoteNextWaitlistedFarmer(targetMandiId, bookingDate, targetSlotTime);
+  }
+
+  // 4. Notify all tabs & components
+  notifyBroadcast('SLOT_CANCELLED', {
+    bookingId,
+    booking: updatedBooking,
+    promotedBooking,
+  });
+  notifyBroadcast('TOKEN_STATUS_UPDATED', {
+    bookingId,
+    status: 'cancelled',
+    booking: updatedBooking,
+  });
+
+  return { success: true, booking: updatedBooking, promotedBooking };
+}
+
+/**
+ * Retrieves all bookings associated with a farmer's mobile number or user ID.
+ */
+export async function getFarmerBookings(phoneOrUserId: string): Promise<SlotBooking[]> {
+  const cleanPhone = phoneOrUserId.replace(/\D/g, '').slice(-10);
+  const supabase = createClient();
+  let list: SlotBooking[] = [];
+
+  try {
+    let query = supabase.from('slot_bookings').select('*');
+    if (cleanPhone) {
+      query = query.or(`farmer_phone.eq.${phoneOrUserId},farmer_phone.ilike.%${cleanPhone}%,farmer_id.eq.${phoneOrUserId}`);
+    } else {
+      query = query.eq('farmer_id', phoneOrUserId);
+    }
+
+    const { data, error } = await query
+      .order('booking_date', { ascending: false })
+      .order('slot_start_time', { ascending: false });
+
+    if (!error && data) {
+      list = data as SlotBooking[];
+    }
+  } catch {
+    // fallback
+  }
+
+  const localList = getLocalCache<SlotBooking[]>(STORAGE_BOOKINGS, []);
+  for (const item of localList) {
+    const matchPhone = cleanPhone && item.farmer_phone?.replace(/\D/g, '').slice(-10) === cleanPhone;
+    const matchId = item.farmer_id === phoneOrUserId;
+    if (matchPhone || matchId) {
+      const existingIdx = list.findIndex((b) => b.id === item.id);
+      if (existingIdx === -1) {
+        list.push(item);
+      } else {
+        list[existingIdx] = item;
+      }
+    }
+  }
+
+  list.sort((a, b) => b.booking_date.localeCompare(a.booking_date) || b.slot_start_time.localeCompare(a.slot_start_time));
+  return list;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
